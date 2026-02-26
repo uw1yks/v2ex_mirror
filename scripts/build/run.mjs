@@ -49,11 +49,11 @@ async function main() {
     state
   });
   await buildIndexPages({
-    title: "V2EX 镜像 - 所有帖子",
+    title: "V2EX 镜像 - 所有",
     basePath: "/all",
     items: allTopics,
     topicMap,
-    heading: "所有帖子",
+    heading: "所有",
     state
   });
 
@@ -284,7 +284,7 @@ function siteNav(current) {
   const links = [
     ["/", "最新"],
     ["/hot/", "最热"],
-    ["/all/", "所有帖子"],
+    ["/all/", "所有"],
     ["/nodes/", "节点"],
     ["/about/", "关于"]
   ];
