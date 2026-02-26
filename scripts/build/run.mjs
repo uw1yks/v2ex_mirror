@@ -22,7 +22,10 @@ async function main() {
 
   const topicDocs = await readTopicDocs(path.join(DATA_DIR, "topics"));
   const topicMap = new Map(topicDocs.map((doc) => [Number(doc?.topic?.id), doc.topic]));
-  const nodeBuckets = groupByNode([...topicMap.values()]);
+  const allTopics = [...topicMap.values()].sort(
+    (a, b) => Number(b?.last_modified ?? b?.last_touched ?? b?.created ?? 0) - Number(a?.last_modified ?? a?.last_touched ?? a?.created ?? 0)
+  );
+  const nodeBuckets = groupByNode(allTopics);
 
   await fs.rm(DIST_DIR, { recursive: true, force: true });
   await fs.mkdir(DIST_DIR, { recursive: true });
@@ -44,14 +47,23 @@ async function main() {
     heading: "热门帖子",
     state
   });
+  await buildIndexPages({
+    title: "V2EX 镜像 - 所有帖子",
+    basePath: "/all",
+    items: allTopics,
+    topicMap,
+    heading: "所有帖子",
+    state
+  });
+
   await buildNodesPage(nodes, nodeBuckets, state);
   await buildNodeTopicPages(nodes, nodeBuckets, state);
   await buildTopicPages(topicMap, state);
-  await buildAboutPage(state);
+  await buildAboutPage(state, allTopics.length);
   await buildSitemap(topicMap);
 
   console.log(
-    `Build done. latest=${latest.length} hot=${hot.length} nodes=${nodes.length} topics=${topicMap.size} basePath=${BASE_PATH || "/"}`
+    `Build done. latest=${latest.length} hot=${hot.length} all=${allTopics.length} nodes=${nodes.length} topics=${topicMap.size} basePath=${BASE_PATH || "/"}`
   );
 }
 
@@ -82,7 +94,7 @@ async function buildIndexPages({ title, basePath, items, topicMap, heading, stat
 <h1>${escapeHtml(heading)}</h1>
 ${siteNav(basePath)}
 <ul class="topic-list">
-${rows}
+${rows || '<li class="empty">暂无帖子</li>'}
 </ul>
 ${pager}
 ${syncInfo(state)}
@@ -119,7 +131,7 @@ async function buildNodesPage(nodes, nodeBuckets, state) {
 <h1>节点列表</h1>
 ${siteNav("/nodes")}
 <ul class="node-list">
-${rows}
+${rows || '<li class="empty">暂无节点</li>'}
 </ul>
 ${syncInfo(state)}
 `
@@ -130,7 +142,7 @@ ${syncInfo(state)}
 async function buildNodeTopicPages(nodes, nodeBuckets, state) {
   for (const node of nodes) {
     const topics = (nodeBuckets.get(node.name) ?? []).sort(
-      (a, b) => Number(b.last_modified ?? 0) - Number(a.last_modified ?? 0)
+      (a, b) => Number(b.last_modified ?? b.last_touched ?? 0) - Number(a.last_modified ?? a.last_touched ?? 0)
     );
     const rows = topics
       .map(
@@ -195,7 +207,7 @@ ${syncInfo(state)}
   }
 }
 
-async function buildAboutPage(state) {
+async function buildAboutPage(state, totalTopics) {
   const html = layout({
     pageTitle: "V2EX 镜像 - 关于",
     body: `
@@ -204,6 +216,7 @@ ${siteNav("/about")}
 <p>这是一个非官方的 V2EX 只读镜像站，用于浏览公开帖子内容。</p>
 <p>数据来源于 V2EX 公开 API，内容版权归原作者与 V2EX 所有。</p>
 <p>本站不提供登录、发帖、回帖等功能。</p>
+<p>所有帖子总数: <strong>${Number(totalTopics)}</strong></p>
 ${syncInfo(state)}
 `
   });
@@ -211,10 +224,8 @@ ${syncInfo(state)}
 }
 
 async function buildSitemap(topicMap) {
-  const paths = ["/", "/hot/", "/nodes/", "/about/", ...[...topicMap.keys()].map((id) => `/t/${id}/`)];
-  const body = paths
-    .map((p) => `<url><loc>${escapeXml(absoluteUrl(p))}</loc></url>`)
-    .join("");
+  const paths = ["/", "/hot/", "/all/", "/nodes/", "/about/", ...[...topicMap.keys()].map((id) => `/t/${id}/`)];
+  const body = paths.map((p) => `<url><loc>${escapeXml(absoluteUrl(p))}</loc></url>`).join("");
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${body}</urlset>`;
   await writeFile(path.join(DIST_DIR, "sitemap.xml"), xml);
@@ -235,6 +246,7 @@ function siteNav(current) {
   const links = [
     ["/", "最新"],
     ["/hot/", "最热"],
+    ["/all/", "所有帖子"],
     ["/nodes/", "节点"],
     ["/about/", "关于"]
   ];
@@ -393,3 +405,4 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
+

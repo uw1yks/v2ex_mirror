@@ -51,6 +51,13 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Sync latest/hot lists
+        run: npm run sync
+        env:
+          FETCH_CONCURRENCY: "2"
+          FETCH_INTERVAL_MS: "350"
+          TOPIC_REFRESH_TTL_HOURS: "24"
+
       - name: Backfill historical topics
         run: npm run backfill
         env:
@@ -74,4 +81,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
