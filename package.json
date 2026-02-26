@@ -1,0 +1,15 @@
+{
+  "name": "v2ex-mirror",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "sync": "node scripts/fetch/run.mjs",
+    "build": "node scripts/build/run.mjs",
+    "sync:build": "npm run sync && npm run build"
+  }
+}
+
