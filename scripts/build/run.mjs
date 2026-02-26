@@ -13,7 +13,10 @@ const SITE_BASE_URL = (process.env.SITE_BASE_URL ?? DEFAULT_BASE_URL).replace(/\
 
 async function main() {
   const latest = await readJson(path.join(DATA_DIR, "index", "latest.json"), []);
-  const hot = await readJson(path.join(DATA_DIR, "index", "hot.json"), []);
+  const hot = await readJson(
+    path.join(DATA_DIR, "index", "hot_pool.json"),
+    await readJson(path.join(DATA_DIR, "index", "hot.json"), [])
+  );
   const nodes = await readJson(path.join(DATA_DIR, "nodes", "all.json"), []);
   const state = await readJson(path.join(DATA_DIR, "meta", "state.json"), {});
 

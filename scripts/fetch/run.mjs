@@ -10,13 +10,16 @@ const REPLIES_DIR = path.join(DATA_DIR, "replies");
 const META_DIR = path.join(DATA_DIR, "meta");
 const STATE_FILE = path.join(META_DIR, "state.json");
 const LAST_RUN_FILE = path.join(META_DIR, "last_run.json");
+const HOT_POOL_FILE = path.join(INDEX_DIR, "hot_pool.json");
 
 const BASE = "https://www.v2ex.com/api";
 const CONFIG = {
   concurrency: Number(process.env.FETCH_CONCURRENCY ?? 2),
   intervalMs: Number(process.env.FETCH_INTERVAL_MS ?? 350),
   refreshTtlHours: Number(process.env.TOPIC_REFRESH_TTL_HOURS ?? 24),
-  retries: 3
+  retries: 3,
+  hotPoolLimit: Number(process.env.HOT_POOL_LIMIT ?? 600),
+  hotPoolTtlDays: Number(process.env.HOT_POOL_TTL_DAYS ?? 30)
 };
 
 const endpoints = {
@@ -49,9 +52,11 @@ async function main() {
 
   const latest = await fetchAndPersistList("latest", endpoints.latest, path.join(INDEX_DIR, "latest.json"), report);
   const hot = await fetchAndPersistList("hot", endpoints.hot, path.join(INDEX_DIR, "hot.json"), report);
+  const hotPool = await updateHotPool(hot);
+  report.lists.hot_pool = { status: "updated", count: hotPool.length, source: HOT_POOL_FILE };
   await fetchAndPersistList("nodes", endpoints.nodes, path.join(NODES_DIR, "all.json"), report);
 
-  const candidates = dedupeTopicIds([...(latest ?? []), ...(hot ?? [])]);
+  const candidates = dedupeTopicIds([...(latest ?? []), ...(hotPool ?? [])]);
   report.topics.candidates = candidates.length;
 
   const ttlMs = CONFIG.refreshTtlHours * 60 * 60 * 1000;
@@ -134,6 +139,42 @@ async function main() {
   console.log(
     `Sync done. candidates=${report.topics.candidates} refreshed=${report.topics.refreshed} skipped=${report.topics.skipped} failed=${report.topics.failed.length}`
   );
+}
+
+async function updateHotPool(currentHot) {
+  const prevPool = await readJson(HOT_POOL_FILE, []);
+  const merged = mergeTopicLists(prevPool, currentHot ?? []);
+  const ttlMs = CONFIG.hotPoolTtlDays * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const pruned = merged.filter((item) => {
+    const ts = Number(item?.last_touched ?? item?.last_modified ?? item?.created ?? 0) * 1000;
+    if (!Number.isFinite(ts) || ts <= 0) return true;
+    return now - ts <= ttlMs;
+  });
+  const limited = pruned.slice(0, Math.max(1, CONFIG.hotPoolLimit));
+  await writeJsonAtomic(HOT_POOL_FILE, limited);
+  return limited;
+}
+
+function mergeTopicLists(a, b) {
+  const map = new Map();
+  for (const item of [...(a ?? []), ...(b ?? [])]) {
+    const id = Number(item?.id);
+    if (!Number.isFinite(id) || id <= 0) continue;
+    const prev = map.get(id);
+    if (!prev) {
+      map.set(id, item);
+      continue;
+    }
+    const prevScore = topicFreshness(prev);
+    const curScore = topicFreshness(item);
+    if (curScore >= prevScore) map.set(id, item);
+  }
+  return [...map.values()].sort((x, y) => topicFreshness(y) - topicFreshness(x));
+}
+
+function topicFreshness(topic) {
+  return Number(topic?.last_touched ?? topic?.last_modified ?? topic?.created ?? 0);
 }
 
 async function fetchAndPersistList(name, url, filePath, report) {
@@ -260,4 +301,3 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-
