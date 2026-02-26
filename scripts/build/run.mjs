@@ -176,7 +176,7 @@ ${siteNav(`/t/${id}`)}
 <div class="meta-line">
   <span>#${id}</span>
   <span>作者 ${escapeHtml(topic.member?.username ?? "-")}</span>
-  <span>节点 <a href="${url(`/nodes/${escapeAttr(nodeName)}/`)}">${escapeHtml(topic.node?.title ?? nodeName || "-")}</a></span>
+  <span>节点 <a href="${url(`/nodes/${escapeAttr(nodeName)}/`)}">${escapeHtml((topic.node?.title ?? nodeName) || "-")}</a></span>
   <span>回复 ${Number(topic.replies ?? 0)}</span>
   <a href="${escapeAttr(topic.url ?? `https://www.v2ex.com/t/${id}`)}" target="_blank" rel="noopener noreferrer">原帖</a>
 </div>
@@ -382,4 +382,3 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-
