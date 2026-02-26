@@ -53,10 +53,11 @@ async function main() {
   const selectedNodes = nodes.slice(0, CONFIG.nodeLimit);
   report.nodes.selected = selectedNodes.length;
 
-  const candidateIds = await collectCandidateTopicIds(selectedNodes);
-  report.candidates = candidateIds.length;
+  const candidates = await collectCandidateTopics(selectedNodes);
+  report.candidates = candidates.length;
+  const previewById = new Map(candidates.map((c) => [c.id, c.preview]));
 
-  for (const topicId of candidateIds) {
+  for (const topicId of candidates.map((c) => c.id)) {
     const topicFile = path.join(TOPICS_DIR, `${topicId}.json`);
     const repliesFile = path.join(REPLIES_DIR, `${topicId}.json`);
     const existingTopicDoc = await readJson(topicFile, null);
@@ -65,7 +66,7 @@ async function main() {
     try {
       let topic = existingTopicDoc?.topic ?? null;
       if (!topic || CONFIG.forceRefresh) {
-        topic = await fetchTopic(topicId);
+        topic = await fetchTopic(topicId, previewById.get(topicId));
         if (!topic) throw new Error(`Empty topic payload for ${topicId}`);
         await writeJsonAtomic(topicFile, {
           topic,
@@ -130,8 +131,8 @@ function sortNodes(nodes) {
     .sort((a, b) => Number(b?.topics ?? 0) - Number(a?.topics ?? 0));
 }
 
-async function collectCandidateTopicIds(nodes) {
-  const set = new Set();
+async function collectCandidateTopics(nodes) {
+  const map = new Map();
   for (const node of nodes) {
     for (let p = 1; p <= CONFIG.pagesPerNode; p += 1) {
       const url = endpoints.nodeTopics(node.name, p);
@@ -145,8 +146,10 @@ async function collectCandidateTopicIds(nodes) {
         }
         for (const topic of pageTopics) {
           const id = Number(topic?.id);
-          if (Number.isFinite(id) && id > 0) set.add(id);
-          if (set.size >= CONFIG.maxTopics) return [...set];
+          if (Number.isFinite(id) && id > 0 && !map.has(id)) {
+            map.set(id, topic);
+          }
+          if (map.size >= CONFIG.maxTopics) return [...map.entries()].map(([tid, preview]) => ({ id: tid, preview }));
         }
       } catch (error) {
         console.error(`[backfill node ${node.name} p=${p}] ${error.message ?? error}`);
@@ -154,18 +157,35 @@ async function collectCandidateTopicIds(nodes) {
       }
     }
   }
-  return [...set];
+  return [...map.entries()].map(([id, preview]) => ({ id, preview }));
 }
 
-async function fetchTopic(topicId) {
-  const data = await fetchJsonWithRetry(endpoints.topicById(topicId));
-  if (!Array.isArray(data) || data.length === 0) return null;
-  return data[0];
+async function fetchTopic(topicId, preview) {
+  try {
+    const data = await fetchJsonWithRetry(endpoints.topicById(topicId));
+    if (!Array.isArray(data) || data.length === 0) return null;
+    return data[0];
+  } catch (error) {
+    const status = error?.statusCode;
+    if ((status === 403 || status === 404) && preview && Number(preview?.id) === Number(topicId)) {
+      return {
+        ...preview,
+        id: topicId
+      };
+    }
+    throw error;
+  }
 }
 
 async function fetchReplies(topicId) {
-  const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
-  return Array.isArray(data) ? data : [];
+  try {
+    const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    const status = error?.statusCode;
+    if (status === 403 || status === 404) return [];
+    throw error;
+  }
 }
 
 async function fetchJsonWithRetry(url) {
@@ -175,14 +195,23 @@ async function fetchJsonWithRetry(url) {
       await waitRateLimit();
       const response = await fetch(url, {
         headers: {
-          "User-Agent": "v2ex-mirror/0.1 (+https://github.com/)"
+          "User-Agent": "Mozilla/5.0 (compatible; v2ex-mirror/0.1; +https://github.com/)",
+          Accept: "application/json,text/plain,*/*",
+          Referer: "https://www.v2ex.com/"
         }
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+      if (!response.ok) {
+        const error = new Error(`HTTP ${response.status} for ${url}`);
+        error.statusCode = response.status;
+        throw error;
+      }
       return await response.json();
     } catch (error) {
       lastError = error;
-      const backoff = CONFIG.intervalMs * (i + 1) * 2;
+      if (error?.statusCode === 403 || error?.statusCode === 404) {
+        throw error;
+      }
+      const backoff = CONFIG.intervalMs * (i + 1) * 2 + Math.floor(Math.random() * 200);
       await sleep(backoff);
     }
   }
@@ -223,4 +252,3 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-
