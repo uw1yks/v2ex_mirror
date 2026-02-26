@@ -25,6 +25,7 @@ async function main() {
   const allTopics = [...topicMap.values()].sort(
     (a, b) => Number(b?.last_modified ?? b?.last_touched ?? b?.created ?? 0) - Number(a?.last_modified ?? a?.last_touched ?? a?.created ?? 0)
   );
+  const hotExpanded = buildExpandedHotList(hot, allTopics, topicMap);
   const nodeBuckets = groupByNode(allTopics);
 
   await fs.rm(DIST_DIR, { recursive: true, force: true });
@@ -42,7 +43,7 @@ async function main() {
   await buildIndexPages({
     title: "V2EX 镜像 - 最热",
     basePath: "/hot",
-    items: hot,
+    items: hotExpanded,
     topicMap,
     heading: "热门帖子",
     state
@@ -63,8 +64,38 @@ async function main() {
   await buildSitemap(topicMap);
 
   console.log(
-    `Build done. latest=${latest.length} hot=${hot.length} all=${allTopics.length} nodes=${nodes.length} topics=${topicMap.size} basePath=${BASE_PATH || "/"}`
+    `Build done. latest=${latest.length} hot=${hotExpanded.length} all=${allTopics.length} nodes=${nodes.length} topics=${topicMap.size} basePath=${BASE_PATH || "/"}`
   );
+}
+
+function buildExpandedHotList(hotSeed, allTopics, topicMap) {
+  const result = [];
+  const seen = new Set();
+
+  for (const item of hotSeed ?? []) {
+    const id = Number(item?.id);
+    if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue;
+    result.push(topicMap.get(id) ?? item);
+    seen.add(id);
+  }
+
+  const ranked = [...(allTopics ?? [])].sort((a, b) => {
+    const replyDiff = Number(b?.replies ?? 0) - Number(a?.replies ?? 0);
+    if (replyDiff !== 0) return replyDiff;
+    const touchedA = Number(a?.last_touched ?? a?.last_modified ?? a?.created ?? 0);
+    const touchedB = Number(b?.last_touched ?? b?.last_modified ?? b?.created ?? 0);
+    return touchedB - touchedA;
+  });
+
+  for (const topic of ranked) {
+    const id = Number(topic?.id);
+    if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue;
+    result.push(topic);
+    seen.add(id);
+    if (result.length >= 500) break;
+  }
+
+  return result;
 }
 
 async function buildIndexPages({ title, basePath, items, topicMap, heading, state }) {
