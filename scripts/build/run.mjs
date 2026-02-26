@@ -115,7 +115,14 @@ ${syncInfo(state)}
 }
 
 async function buildNodesPage(nodes, nodeBuckets, state) {
-  const rows = nodes
+  const sortedNodes = [...nodes].sort((a, b) => {
+    const countA = nodeBuckets.get(a?.name)?.length ?? 0;
+    const countB = nodeBuckets.get(b?.name)?.length ?? 0;
+    if (countA !== countB) return countB - countA;
+    return String(a?.name ?? "").localeCompare(String(b?.name ?? ""));
+  });
+
+  const rows = sortedNodes
     .map((node) => {
       const count = nodeBuckets.get(node.name)?.length ?? 0;
       return `<li class="node-item">
@@ -405,4 +412,3 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-
