@@ -245,10 +245,8 @@ function siteNav(current) {
 }
 
 function syncInfo(state) {
-  const ts = state?.last_success_at
-    ? new Date(state.last_success_at).toLocaleString("zh-CN", { hour12: false })
-    : "未知";
-  return `<footer class="sync-info">最后同步时间: ${escapeHtml(ts)} · 数据来源: V2EX 公开 API</footer>`;
+  const ts = formatUtc8(state?.last_success_at);
+  return `<footer class="sync-info">最后同步时间(UTC+8): ${escapeHtml(ts)} · 数据来源: V2EX 公开 API</footer>`;
 }
 
 function paginationHtml(basePath, pageNo, totalPages) {
@@ -350,6 +348,16 @@ function escapeXml(input) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
+}
+
+function formatUtc8(isoTs) {
+  if (!isoTs) return "未知";
+  const d = new Date(isoTs);
+  if (Number.isNaN(d.getTime())) return "未知";
+  return d.toLocaleString("zh-CN", {
+    hour12: false,
+    timeZone: "Asia/Shanghai"
+  });
 }
 
 async function readJson(file, fallback) {
