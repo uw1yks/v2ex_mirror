@@ -1,0 +1,77 @@
+name: Backfill Historical Topics
+
+on:
+  workflow_dispatch:
+    inputs:
+      node_limit:
+        description: "How many nodes to scan (sorted by node topic count)"
+        required: false
+        default: "40"
+      pages_per_node:
+        description: "How many pages to fetch per node"
+        required: false
+        default: "3"
+      max_topics:
+        description: "Maximum topic ids to process in one run"
+        required: false
+        default: "2000"
+      force_refresh:
+        description: "Refresh existing topic/reply files too (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: v2ex-mirror-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill-build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Backfill historical topics
+        run: npm run backfill
+        env:
+          BACKFILL_NODE_LIMIT: ${{ github.event.inputs.node_limit }}
+          BACKFILL_PAGES_PER_NODE: ${{ github.event.inputs.pages_per_node }}
+          BACKFILL_MAX_TOPICS: ${{ github.event.inputs.max_topics }}
+          BACKFILL_FORCE_REFRESH: ${{ github.event.inputs.force_refresh }}
+          FETCH_INTERVAL_MS: "350"
+
+      - name: Build static site
+        run: npm run build
+        env:
+          SITE_BASE_PATH: "/${{ github.event.repository.name }}"
+          SITE_BASE_URL: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+

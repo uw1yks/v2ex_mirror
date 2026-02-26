@@ -8,8 +8,9 @@
   },
   "scripts": {
     "sync": "node scripts/fetch/run.mjs",
+    "backfill": "node scripts/fetch/backfill.mjs",
     "build": "node scripts/build/run.mjs",
-    "sync:build": "npm run sync && npm run build"
+    "sync:build": "npm run sync && npm run build",
+    "backfill:build": "npm run backfill && npm run build"
   }
 }
-

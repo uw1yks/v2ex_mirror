@@ -18,6 +18,22 @@ npm run build
 
 构建产物位于 `dist/`。
 
+## 历史回填
+
+用于给节点页补更多旧帖子：
+
+```bash
+npm run backfill
+npm run build
+```
+
+也可以在 GitHub Actions 手动触发 `Backfill Historical Topics`，支持输入：
+
+- `node_limit`
+- `pages_per_node`
+- `max_topics`
+- `force_refresh`
+
 ## 目录
 
 - `scripts/fetch/run.mjs` 抓取与增量同步
@@ -29,4 +45,3 @@ npm run build
 
 - 本项目是非官方只读镜像，内容版权归原作者与 V2EX 所有。
 - 抓取逻辑已内置限速与重试，避免高频请求。
-
