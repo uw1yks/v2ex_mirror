@@ -6,6 +6,11 @@ const DATA_DIR = path.join(ROOT, "data");
 const DIST_DIR = path.join(ROOT, "dist");
 const PAGE_SIZE = 30;
 
+const RAW_BASE_PATH = process.env.SITE_BASE_PATH ?? "";
+const BASE_PATH = normalizeBasePath(RAW_BASE_PATH);
+const DEFAULT_BASE_URL = BASE_PATH ? `https://example.com${BASE_PATH}` : "https://example.com";
+const SITE_BASE_URL = (process.env.SITE_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+
 async function main() {
   const latest = await readJson(path.join(DATA_DIR, "index", "latest.json"), []);
   const hot = await readJson(path.join(DATA_DIR, "index", "hot.json"), []);
@@ -43,7 +48,7 @@ async function main() {
   await buildSitemap(topicMap);
 
   console.log(
-    `Build done. latest=${latest.length} hot=${hot.length} nodes=${nodes.length} topics=${topicMap.size}`
+    `Build done. latest=${latest.length} hot=${hot.length} nodes=${nodes.length} topics=${topicMap.size} basePath=${BASE_PATH || "/"}`
   );
 }
 
@@ -56,10 +61,12 @@ async function buildIndexPages({ title, basePath, items, topicMap, heading, stat
         const id = Number(item?.id ?? 0);
         const topic = topicMap.get(id) ?? item;
         const replies = Number(topic?.replies ?? item?.replies ?? 0);
-        const node = topic?.node?.name ? `<a href="/nodes/${escapeAttr(topic.node.name)}/">${escapeHtml(topic.node.title ?? topic.node.name)}</a>` : "-";
+        const node = topic?.node?.name
+          ? `<a href="${url(`/nodes/${escapeAttr(topic.node.name)}/`)}">${escapeHtml(topic.node.title ?? topic.node.name)}</a>`
+          : "-";
         const author = escapeHtml(topic?.member?.username ?? "-");
         return `<li class="topic-item">
-  <a class="topic-title" href="/t/${id}/">${escapeHtml(topic?.title ?? "(无标题)")}</a>
+  <a class="topic-title" href="${url(`/t/${id}/`)}">${escapeHtml(topic?.title ?? "(无标题)")}</a>
   <div class="meta">#${id} · ${node} · ${author} · 回复 ${replies}</div>
 </li>`;
       })
@@ -97,7 +104,7 @@ async function buildNodesPage(nodes, nodeBuckets, state) {
     .map((node) => {
       const count = nodeBuckets.get(node.name)?.length ?? 0;
       return `<li class="node-item">
-  <a href="/nodes/${escapeAttr(node.name)}/">${escapeHtml(node.title ?? node.name)}</a>
+  <a href="${url(`/nodes/${escapeAttr(node.name)}/`)}">${escapeHtml(node.title ?? node.name)}</a>
   <span class="meta">${escapeHtml(node.name)} · 本地镜像帖子 ${count}</span>
 </li>`;
     })
@@ -119,11 +126,13 @@ ${syncInfo(state)}
 
 async function buildNodeTopicPages(nodes, nodeBuckets, state) {
   for (const node of nodes) {
-    const topics = (nodeBuckets.get(node.name) ?? []).sort((a, b) => Number(b.last_modified ?? 0) - Number(a.last_modified ?? 0));
+    const topics = (nodeBuckets.get(node.name) ?? []).sort(
+      (a, b) => Number(b.last_modified ?? 0) - Number(a.last_modified ?? 0)
+    );
     const rows = topics
       .map(
         (topic) => `<li class="topic-item">
-  <a class="topic-title" href="/t/${topic.id}/">${escapeHtml(topic.title ?? "(无标题)")}</a>
+  <a class="topic-title" href="${url(`/t/${topic.id}/`)}">${escapeHtml(topic.title ?? "(无标题)")}</a>
   <div class="meta">#${topic.id} · ${escapeHtml(topic.member?.username ?? "-")} · 回复 ${Number(topic.replies ?? 0)}</div>
 </li>`
       )
@@ -158,6 +167,7 @@ async function buildTopicPages(topicMap, state) {
       )
       .join("\n");
 
+    const nodeName = topic.node?.name ?? "";
     const html = layout({
       pageTitle: `V2EX 镜像 - ${topic.title ?? id}`,
       body: `
@@ -166,7 +176,7 @@ ${siteNav(`/t/${id}`)}
 <div class="meta-line">
   <span>#${id}</span>
   <span>作者 ${escapeHtml(topic.member?.username ?? "-")}</span>
-  <span>节点 <a href="/nodes/${escapeAttr(topic.node?.name ?? "")}/">${escapeHtml(topic.node?.title ?? topic.node?.name ?? "-")}</a></span>
+  <span>节点 <a href="${url(`/nodes/${escapeAttr(nodeName)}/`)}">${escapeHtml(topic.node?.title ?? nodeName || "-")}</a></span>
   <span>回复 ${Number(topic.replies ?? 0)}</span>
   <a href="${escapeAttr(topic.url ?? `https://www.v2ex.com/t/${id}`)}" target="_blank" rel="noopener noreferrer">原帖</a>
 </div>
@@ -198,9 +208,9 @@ ${syncInfo(state)}
 }
 
 async function buildSitemap(topicMap) {
-  const urls = ["/", "/hot/", "/nodes/", "/about/", ...[...topicMap.keys()].map((id) => `/t/${id}/`)];
-  const body = urls
-    .map((u) => `<url><loc>${escapeXml(`https://example.com${u}`)}</loc></url>`)
+  const paths = ["/", "/hot/", "/nodes/", "/about/", ...[...topicMap.keys()].map((id) => `/t/${id}/`)];
+  const body = paths
+    .map((p) => `<url><loc>${escapeXml(absoluteUrl(p))}</loc></url>`)
     .join("");
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${body}</urlset>`;
@@ -227,12 +237,14 @@ function siteNav(current) {
   ];
   const currentNormalized = normalizeSlash(current);
   return `<nav class="nav">${links
-    .map(([href, label]) => `<a class="${normalizeSlash(href) === currentNormalized ? "active" : ""}" href="${href}">${label}</a>`)
+    .map(([href, label]) => `<a class="${normalizeSlash(href) === currentNormalized ? "active" : ""}" href="${url(href)}">${label}</a>`)
     .join("")}</nav>`;
 }
 
 function syncInfo(state) {
-  const ts = state?.last_success_at ? new Date(state.last_success_at).toLocaleString("zh-CN", { hour12: false }) : "未知";
+  const ts = state?.last_success_at
+    ? new Date(state.last_success_at).toLocaleString("zh-CN", { hour12: false })
+    : "未知";
   return `<footer class="sync-info">最后同步时间: ${escapeHtml(ts)} · 数据来源: V2EX 公开 API</footer>`;
 }
 
@@ -242,14 +254,30 @@ function paginationHtml(basePath, pageNo, totalPages) {
   const next = pageNo < totalPages ? pagePath(basePath, pageNo + 1) : null;
   return `<div class="pager">
   <span>第 ${pageNo} / ${totalPages} 页</span>
-  ${prev ? `<a href="${prev}">上一页</a>` : '<span class="disabled">上一页</span>'}
-  ${next ? `<a href="${next}">下一页</a>` : '<span class="disabled">下一页</span>'}
+  ${prev ? `<a href="${url(prev)}">上一页</a>` : '<span class="disabled">上一页</span>'}
+  ${next ? `<a href="${url(next)}">下一页</a>` : '<span class="disabled">下一页</span>'}
 </div>`;
 }
 
 function pagePath(basePath, pageNo) {
   if (basePath === "/") return pageNo === 1 ? "/" : `/page/${pageNo}/`;
-  return pageNo === 1 ? `${normalizeSlash(basePath)}` : `${normalizeSlash(basePath)}page/${pageNo}/`;
+  return pageNo === 1 ? normalizeSlash(basePath) : `${normalizeSlash(basePath)}page/${pageNo}/`;
+}
+
+function absoluteUrl(localPath) {
+  return `${SITE_BASE_URL}${url(localPath)}`;
+}
+
+function url(localPath) {
+  const p = localPath.startsWith("/") ? localPath : `/${localPath}`;
+  return `${BASE_PATH}${p}`.replace(/\/{2,}/g, "/");
+}
+
+function normalizeBasePath(p) {
+  const trimmed = String(p ?? "").trim();
+  if (!trimmed || trimmed === "/") return "";
+  const start = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return start.endsWith("/") ? start.slice(0, -1) : start;
 }
 
 function normalizeSlash(p) {
@@ -277,7 +305,7 @@ function layout({ pageTitle, body }) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(pageTitle)}</title>
   <meta name="description" content="V2EX 只读镜像站">
-  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="${url("/assets/style.css")}">
 </head>
 <body>
   <main class="container">
