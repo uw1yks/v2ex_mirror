@@ -48,6 +48,15 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
+      - name: Restore data cache
+        id: restore-data-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: v2ex-mirror-data-${{ github.repository }}-${{ github.run_id }}
+          restore-keys: |
+            v2ex-mirror-data-${{ github.repository }}-
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
@@ -72,6 +81,12 @@ jobs:
         env:
           SITE_BASE_PATH: "/${{ github.event.repository.name }}"
           SITE_BASE_URL: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+
+      - name: Save data cache
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: ${{ steps.restore-data-cache.outputs.cache-primary-key }}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
