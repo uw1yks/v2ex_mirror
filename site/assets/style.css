@@ -104,6 +104,17 @@ a:hover {
   overflow-wrap: break-word;
 }
 
+.content img,
+.content video,
+.content iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+.content img {
+  display: block;
+}
+
 .pager {
   display: flex;
   align-items: center;
@@ -127,4 +138,3 @@ a:hover {
   border-top: 1px solid var(--line);
   padding-top: 12px;
 }
-
