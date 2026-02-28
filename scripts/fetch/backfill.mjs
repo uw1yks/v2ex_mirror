@@ -219,7 +219,7 @@ async function fetchJsonWithRetry(url, options = {}) {
         headers: {
           "User-Agent": "Mozilla/5.0 (compatible; v2ex-mirror/0.1; +https://github.com/)",
           Accept: "application/json,text/plain,*/*",
-          Referer: "https://www.v2ex.com/"
+          Referer: "https://www.v2ex.com/",
           ...(options.authToken ? { Authorization: `Bearer ${options.authToken}` } : {})
         }
       });

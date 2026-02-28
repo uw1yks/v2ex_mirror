@@ -270,7 +270,7 @@ async function fetchJsonWithRetry(url, options = {}) {
       await waitRateLimit();
       const response = await fetch(url, {
         headers: {
-          "User-Agent": "v2ex-mirror/0.1 (+https://github.com/)"
+          "User-Agent": "v2ex-mirror/0.1 (+https://github.com/)",
           ...(options.authToken ? { Authorization: `Bearer ${options.authToken}` } : {})
         }
       });
