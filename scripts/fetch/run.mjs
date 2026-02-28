@@ -106,7 +106,7 @@ async function main() {
         Number(existingRepliesDoc?.meta?.reply_count ?? -1) !== Number(topic?.replies ?? -2);
 
       if (shouldRefreshReplies && topic) {
-        const replies = await fetchReplies(topicId);
+        const replies = await fetchReplies(topicId, Number(topic.replies ?? 0));
         const totalCount = Number(topic.replies ?? replies.length);
         const fetchedCount = Array.isArray(replies) ? replies.length : 0;
         const repliesDoc = {
@@ -243,7 +243,7 @@ async function fetchTopic(topicId) {
   return data[0];
 }
 
-async function fetchReplies(topicId) {
+async function fetchReplies(topicId, expectedCount = 0) {
   const token = process.env.V2EX_TOKEN;
   if (!token) {
     const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
@@ -259,6 +259,10 @@ async function fetchReplies(topicId) {
     if (!items.length) break;
     all.push(...items);
     if (items.length < 50) break;
+  }
+  if (all.length === 0 && expectedCount > 0) {
+    const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
+    return Array.isArray(data) ? data : [];
   }
   return all;
 }

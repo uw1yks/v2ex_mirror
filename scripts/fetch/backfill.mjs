@@ -89,7 +89,7 @@ async function main() {
         Number(existingRepliesDoc?.meta?.reply_count ?? -1) !== Number(topic?.replies ?? -2);
 
       if (shouldFetchReplies && topic) {
-        const replies = await fetchReplies(topicId);
+        const replies = await fetchReplies(topicId, Number(topic.replies ?? 0));
         const totalCount = Number(topic.replies ?? replies.length);
         const fetchedCount = Array.isArray(replies) ? replies.length : 0;
         await writeJsonAtomic(repliesFile, {
@@ -184,7 +184,7 @@ async function fetchTopic(topicId, preview) {
   }
 }
 
-async function fetchReplies(topicId) {
+async function fetchReplies(topicId, expectedCount = 0) {
   const token = process.env.V2EX_TOKEN;
   if (!token) {
     try {
@@ -206,6 +206,16 @@ async function fetchReplies(topicId) {
     if (!items.length) break;
     all.push(...items);
     if (items.length < 50) break;
+  }
+  if (all.length === 0 && expectedCount > 0) {
+    try {
+      const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      const status = error?.statusCode;
+      if (status === 403 || status === 404) return [];
+      throw error;
+    }
   }
   return all;
 }
