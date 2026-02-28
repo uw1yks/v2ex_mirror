@@ -51,6 +51,7 @@ jobs:
           FETCH_CONCURRENCY: "2"
           FETCH_INTERVAL_MS: "350"
           TOPIC_REFRESH_TTL_HOURS: "24"
+          V2EX_TOKEN: ${{ secrets.V2EX_TOKEN }}
 
       - name: Build static site
         run: npm run build

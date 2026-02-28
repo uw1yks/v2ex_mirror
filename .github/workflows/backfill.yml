@@ -66,6 +66,7 @@ jobs:
           FETCH_CONCURRENCY: "2"
           FETCH_INTERVAL_MS: "350"
           TOPIC_REFRESH_TTL_HOURS: "24"
+          V2EX_TOKEN: ${{ secrets.V2EX_TOKEN }}
 
       - name: Backfill historical topics
         run: npm run backfill
@@ -75,6 +76,7 @@ jobs:
           BACKFILL_MAX_TOPICS: ${{ github.event.inputs.max_topics }}
           BACKFILL_FORCE_REFRESH: ${{ github.event.inputs.force_refresh }}
           FETCH_INTERVAL_MS: "350"
+          V2EX_TOKEN: ${{ secrets.V2EX_TOKEN }}
 
       - name: Build static site
         run: npm run build

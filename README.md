@@ -35,6 +35,10 @@ npm run build
 - `max_topics`
 - `force_refresh`
 
+## API 2.0（可选）
+
+设置 GitHub Secrets `V2EX_TOKEN` 后，抓取回复会自动使用 API 2.0 分页，解决回复不完整问题。
+
 ## 目录
 
 - `scripts/fetch/run.mjs` 抓取与增量同步

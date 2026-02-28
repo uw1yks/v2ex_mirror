@@ -9,7 +9,8 @@ const REPLIES_DIR = path.join(DATA_DIR, "replies");
 const META_DIR = path.join(DATA_DIR, "meta");
 const REPORT_FILE = path.join(META_DIR, "backfill_last_run.json");
 
-const BASE = "https://www.v2ex.com/api";
+const BASE_V1 = "https://www.v2ex.com/api";
+const BASE_V2 = "https://www.v2ex.com/api/v2";
 const CONFIG = {
   nodeLimit: Number(process.env.BACKFILL_NODE_LIMIT ?? 40),
   pagesPerNode: Number(process.env.BACKFILL_PAGES_PER_NODE ?? 3),
@@ -20,10 +21,11 @@ const CONFIG = {
 };
 
 const endpoints = {
-  nodes: `${BASE}/nodes/all.json`,
-  nodeTopics: (nodeName, p) => `${BASE}/topics/show.json?node_name=${encodeURIComponent(nodeName)}&p=${p}`,
-  topicById: (id) => `${BASE}/topics/show.json?id=${id}`,
-  repliesByTopicId: (id) => `${BASE}/replies/show.json?topic_id=${id}`
+  nodes: `${BASE_V1}/nodes/all.json`,
+  nodeTopics: (nodeName, p) => `${BASE_V1}/topics/show.json?node_name=${encodeURIComponent(nodeName)}&p=${p}`,
+  topicById: (id) => `${BASE_V1}/topics/show.json?id=${id}`,
+  repliesByTopicId: (id) => `${BASE_V1}/replies/show.json?topic_id=${id}`,
+  v2Replies: (id, p) => `${BASE_V2}/topics/${id}/replies?p=${p}`
 };
 
 let nextAllowedAt = 0;
@@ -183,17 +185,32 @@ async function fetchTopic(topicId, preview) {
 }
 
 async function fetchReplies(topicId) {
-  try {
-    const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
-    return Array.isArray(data) ? data : [];
-  } catch (error) {
-    const status = error?.statusCode;
-    if (status === 403 || status === 404) return [];
-    throw error;
+  const token = process.env.V2EX_TOKEN;
+  if (!token) {
+    try {
+      const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      const status = error?.statusCode;
+      if (status === 403 || status === 404) return [];
+      throw error;
+    }
   }
+
+  const all = [];
+  for (let p = 1; p <= 50; p += 1) {
+    const page = await fetchJsonWithRetry(endpoints.v2Replies(topicId, p), {
+      authToken: token
+    });
+    const items = Array.isArray(page?.result) ? page.result : Array.isArray(page) ? page : [];
+    if (!items.length) break;
+    all.push(...items);
+    if (items.length < 50) break;
+  }
+  return all;
 }
 
-async function fetchJsonWithRetry(url) {
+async function fetchJsonWithRetry(url, options = {}) {
   let lastError = null;
   for (let i = 0; i < CONFIG.retries; i += 1) {
     try {
@@ -203,6 +220,7 @@ async function fetchJsonWithRetry(url) {
           "User-Agent": "Mozilla/5.0 (compatible; v2ex-mirror/0.1; +https://github.com/)",
           Accept: "application/json,text/plain,*/*",
           Referer: "https://www.v2ex.com/"
+          ...(options.authToken ? { Authorization: `Bearer ${options.authToken}` } : {})
         }
       });
       if (!response.ok) {

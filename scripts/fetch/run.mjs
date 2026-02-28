@@ -12,7 +12,8 @@ const STATE_FILE = path.join(META_DIR, "state.json");
 const LAST_RUN_FILE = path.join(META_DIR, "last_run.json");
 const HOT_POOL_FILE = path.join(INDEX_DIR, "hot_pool.json");
 
-const BASE = "https://www.v2ex.com/api";
+const BASE_V1 = "https://www.v2ex.com/api";
+const BASE_V2 = "https://www.v2ex.com/api/v2";
 const CONFIG = {
   concurrency: Number(process.env.FETCH_CONCURRENCY ?? 2),
   intervalMs: Number(process.env.FETCH_INTERVAL_MS ?? 350),
@@ -23,11 +24,12 @@ const CONFIG = {
 };
 
 const endpoints = {
-  latest: `${BASE}/topics/latest.json`,
-  hot: `${BASE}/topics/hot.json`,
-  nodes: `${BASE}/nodes/all.json`,
-  topicById: (id) => `${BASE}/topics/show.json?id=${id}`,
-  repliesByTopicId: (id) => `${BASE}/replies/show.json?topic_id=${id}`
+  latest: `${BASE_V1}/topics/latest.json`,
+  hot: `${BASE_V1}/topics/hot.json`,
+  nodes: `${BASE_V1}/nodes/all.json`,
+  topicById: (id) => `${BASE_V1}/topics/show.json?id=${id}`,
+  repliesByTopicId: (id) => `${BASE_V1}/replies/show.json?topic_id=${id}`,
+  v2Replies: (id, p) => `${BASE_V2}/topics/${id}/replies?p=${p}`
 };
 
 let nextAllowedAt = 0;
@@ -242,11 +244,26 @@ async function fetchTopic(topicId) {
 }
 
 async function fetchReplies(topicId) {
-  const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
-  return Array.isArray(data) ? data : [];
+  const token = process.env.V2EX_TOKEN;
+  if (!token) {
+    const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
+    return Array.isArray(data) ? data : [];
+  }
+
+  const all = [];
+  for (let p = 1; p <= 50; p += 1) {
+    const page = await fetchJsonWithRetry(endpoints.v2Replies(topicId, p), {
+      authToken: token
+    });
+    const items = Array.isArray(page?.result) ? page.result : Array.isArray(page) ? page : [];
+    if (!items.length) break;
+    all.push(...items);
+    if (items.length < 50) break;
+  }
+  return all;
 }
 
-async function fetchJsonWithRetry(url) {
+async function fetchJsonWithRetry(url, options = {}) {
   let lastError = null;
   for (let i = 0; i < CONFIG.retries; i += 1) {
     try {
@@ -254,6 +271,7 @@ async function fetchJsonWithRetry(url) {
       const response = await fetch(url, {
         headers: {
           "User-Agent": "v2ex-mirror/0.1 (+https://github.com/)"
+          ...(options.authToken ? { Authorization: `Bearer ${options.authToken}` } : {})
         }
       });
       if (!response.ok) {
