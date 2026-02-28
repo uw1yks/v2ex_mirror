@@ -88,12 +88,17 @@ async function main() {
 
       if (shouldFetchReplies && topic) {
         const replies = await fetchReplies(topicId);
+        const totalCount = Number(topic.replies ?? replies.length);
+        const fetchedCount = Array.isArray(replies) ? replies.length : 0;
         await writeJsonAtomic(repliesFile, {
           replies,
           meta: {
             fetched_at: new Date().toISOString(),
             source: endpoints.repliesByTopicId(topicId),
-            reply_count: Number(topic.replies ?? replies.length),
+            reply_count: totalCount,
+            total_count: totalCount,
+            fetched_count: fetchedCount,
+            partial: fetchedCount < totalCount,
             reason: "backfill"
           }
         });

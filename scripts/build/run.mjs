@@ -211,6 +211,9 @@ async function buildTopicPages(topicMap, state) {
   for (const [id, topic] of topicMap.entries()) {
     const repliesDoc = await readJson(path.join(repliesDir, `${id}.json`), { replies: [] });
     const replies = Array.isArray(repliesDoc.replies) ? repliesDoc.replies : [];
+    const totalCount = Number(repliesDoc?.meta?.total_count ?? topic?.replies ?? replies.length);
+    const fetchedCount = Number(repliesDoc?.meta?.fetched_count ?? replies.length);
+    const isPartial = fetchedCount < totalCount;
     const replyRows = replies
       .map(
         (reply) => `<li class="reply-item">
@@ -235,8 +238,9 @@ ${siteNav(`/t/${id}`)}
 </div>
 <article class="content">${topic.content_rendered ?? `<p>${escapeHtml(topic.content ?? "")}</p>`}</article>
 <h2>回复</h2>
+<div class="meta">${isPartial ? `回复未完整抓取（已抓取 ${fetchedCount} / 总 ${totalCount}）` : `已抓取回复 ${fetchedCount}`}</div>
 <ul class="reply-list">
-${replyRows || '<li class="empty">暂无回复</li>'}
+${replyRows || (totalCount > 0 ? `<li class="empty">回复未完整抓取（已抓取 ${fetchedCount} / 总 ${totalCount}）</li>` : '<li class="empty">暂无回复</li>')}
 </ul>
 ${syncInfo(state)}
 `
