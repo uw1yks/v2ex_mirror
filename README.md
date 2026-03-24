@@ -37,7 +37,7 @@ npm run build
 
 ## API 2.0（可选）
 
-设置 GitHub Secrets `V2EX_TOKEN` 后，抓取回复会自动使用 API 2.0 分页，解决回复不完整问题。
+未设置 `V2EX_TOKEN` 时，项目会使用 API v1 的兼容写法抓取完整回复；设置 `V2EX_TOKEN` 后，则会优先使用 API 2.0 分页抓取。
 
 ## 目录
 

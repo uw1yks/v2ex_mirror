@@ -25,6 +25,7 @@ const endpoints = {
   nodeTopics: (nodeName, p) => `${BASE_V1}/topics/show.json?node_name=${encodeURIComponent(nodeName)}&p=${p}`,
   topicById: (id) => `${BASE_V1}/topics/show.json?id=${id}`,
   repliesByTopicId: (id) => `${BASE_V1}/replies/show.json?topic_id=${id}`,
+  repliesByTopicIdAll: (id) => `${BASE_V1}/replies/show.json?topic_id=${id}&p=1`,
   v2Replies: (id, p) => `${BASE_V2}/topics/${id}/replies?p=${p}`
 };
 
@@ -188,7 +189,7 @@ async function fetchReplies(topicId, expectedCount = 0) {
   const token = process.env.V2EX_TOKEN;
   if (!token) {
     try {
-      const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
+      const data = await fetchJsonWithRetry(endpoints.repliesByTopicIdAll(topicId));
       return Array.isArray(data) ? data : [];
     } catch (error) {
       const status = error?.statusCode;
@@ -209,7 +210,7 @@ async function fetchReplies(topicId, expectedCount = 0) {
   }
   if (all.length === 0 && expectedCount > 0) {
     try {
-      const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
+      const data = await fetchJsonWithRetry(endpoints.repliesByTopicIdAll(topicId));
       return Array.isArray(data) ? data : [];
     } catch (error) {
       const status = error?.statusCode;

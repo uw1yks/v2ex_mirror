@@ -29,6 +29,7 @@ const endpoints = {
   nodes: `${BASE_V1}/nodes/all.json`,
   topicById: (id) => `${BASE_V1}/topics/show.json?id=${id}`,
   repliesByTopicId: (id) => `${BASE_V1}/replies/show.json?topic_id=${id}`,
+  repliesByTopicIdAll: (id) => `${BASE_V1}/replies/show.json?topic_id=${id}&p=1`,
   v2Replies: (id, p) => `${BASE_V2}/topics/${id}/replies?p=${p}`
 };
 
@@ -246,7 +247,7 @@ async function fetchTopic(topicId) {
 async function fetchReplies(topicId, expectedCount = 0) {
   const token = process.env.V2EX_TOKEN;
   if (!token) {
-    const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
+    const data = await fetchJsonWithRetry(endpoints.repliesByTopicIdAll(topicId));
     return Array.isArray(data) ? data : [];
   }
 
@@ -261,7 +262,7 @@ async function fetchReplies(topicId, expectedCount = 0) {
     if (items.length < 50) break;
   }
   if (all.length === 0 && expectedCount > 0) {
-    const data = await fetchJsonWithRetry(endpoints.repliesByTopicId(topicId));
+    const data = await fetchJsonWithRetry(endpoints.repliesByTopicIdAll(topicId));
     return Array.isArray(data) ? data : [];
   }
   return all;
