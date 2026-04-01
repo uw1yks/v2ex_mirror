@@ -15,6 +15,7 @@ const CONFIG = {
   nodeLimit: Number(process.env.BACKFILL_NODE_LIMIT ?? 40),
   pagesPerNode: Number(process.env.BACKFILL_PAGES_PER_NODE ?? 3),
   maxTopics: Number(process.env.BACKFILL_MAX_TOPICS ?? 2000),
+  repairPartialLimit: Number(process.env.BACKFILL_REPAIR_PARTIAL_LIMIT ?? 5000),
   intervalMs: Number(process.env.FETCH_INTERVAL_MS ?? 350),
   retries: Number(process.env.FETCH_RETRIES ?? 3),
   forceRefresh: String(process.env.BACKFILL_FORCE_REFRESH ?? "false").toLowerCase() === "true"
@@ -43,6 +44,7 @@ async function main() {
       scanned: 0,
       selected: 0
     },
+    repair_candidates: 0,
     candidates: 0,
     topic_detail_fetched: 0,
     topic_detail_skipped: 0,
@@ -56,9 +58,12 @@ async function main() {
   const selectedNodes = nodes.slice(0, CONFIG.nodeLimit);
   report.nodes.selected = selectedNodes.length;
 
-  const candidates = await collectCandidateTopics(selectedNodes);
+  const repairCandidates = await collectRepairCandidates();
+  report.repair_candidates = repairCandidates.length;
+
+  const candidates = mergeCandidates(repairCandidates, await collectCandidateTopics(selectedNodes), CONFIG.maxTopics);
   report.candidates = candidates.length;
-  const previewById = new Map(candidates.map((c) => [c.id, c.preview]));
+  const previewById = new Map(candidates.filter((c) => c.preview).map((c) => [c.id, c.preview]));
 
   for (const topicId of candidates.map((c) => c.id)) {
     const topicFile = path.join(TOPICS_DIR, `${topicId}.json`);
@@ -151,6 +156,42 @@ function shouldRefreshRepliesDoc(existingRepliesDoc, expectedCount) {
   if (repliesLength < totalCount) return true;
 
   return false;
+}
+
+async function collectRepairCandidates() {
+  const files = await safeReadDir(REPLIES_DIR);
+  const candidates = [];
+
+  for (const file of files) {
+    if (!file.isFile() || !file.name.endsWith(".json")) continue;
+
+    const topicId = Number(file.name.replace(/\.json$/i, ""));
+    if (!Number.isFinite(topicId) || topicId <= 0) continue;
+
+    const repliesDoc = await readJson(path.join(REPLIES_DIR, file.name), null);
+    const topicDoc = await readJson(path.join(TOPICS_DIR, `${topicId}.json`), null);
+    const expectedCount = Number(topicDoc?.topic?.replies ?? repliesDoc?.meta?.total_count ?? repliesDoc?.meta?.reply_count ?? 0);
+
+    if (shouldRefreshRepliesDoc(repliesDoc, expectedCount)) {
+      candidates.push({ id: topicId, preview: topicDoc?.topic ?? null });
+      if (candidates.length >= CONFIG.repairPartialLimit) break;
+    }
+  }
+
+  return candidates;
+}
+
+function mergeCandidates(repairCandidates, topicCandidates, maxTopics) {
+  const map = new Map();
+
+  for (const candidate of [...(repairCandidates ?? []), ...(topicCandidates ?? [])]) {
+    const id = Number(candidate?.id);
+    if (!Number.isFinite(id) || id <= 0 || map.has(id)) continue;
+    map.set(id, candidate);
+    if (map.size >= maxTopics) break;
+  }
+
+  return [...map.values()];
 }
 
 async function collectCandidateTopics(nodes) {
@@ -274,6 +315,14 @@ async function waitRateLimit() {
 
 async function ensureDirs(dirs) {
   await Promise.all(dirs.map((dir) => fs.mkdir(dir, { recursive: true })));
+}
+
+async function safeReadDir(dir) {
+  try {
+    return await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
 }
 
 async function readJson(file, fallback) {

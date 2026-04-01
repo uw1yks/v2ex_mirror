@@ -15,6 +15,10 @@ on:
         description: "Maximum topic ids to process in one run"
         required: false
         default: "2000"
+      repair_partial_limit:
+        description: "Maximum existing partial reply docs to repair in one run"
+        required: false
+        default: "5000"
       force_refresh:
         description: "Refresh existing topic/reply files too (true/false)"
         required: false
@@ -74,6 +78,7 @@ jobs:
           BACKFILL_NODE_LIMIT: ${{ github.event.inputs.node_limit }}
           BACKFILL_PAGES_PER_NODE: ${{ github.event.inputs.pages_per_node }}
           BACKFILL_MAX_TOPICS: ${{ github.event.inputs.max_topics }}
+          BACKFILL_REPAIR_PARTIAL_LIMIT: ${{ github.event.inputs.repair_partial_limit }}
           BACKFILL_FORCE_REFRESH: ${{ github.event.inputs.force_refresh }}
           FETCH_INTERVAL_MS: "350"
           V2EX_TOKEN: ${{ secrets.V2EX_TOKEN }}

@@ -33,7 +33,10 @@ npm run build
 - `node_limit`
 - `pages_per_node`
 - `max_topics`
+- `repair_partial_limit`
 - `force_refresh`
+
+其中 `repair_partial_limit` 会优先扫描并修复历史缓存里回复不完整的帖子，即使这些帖子已经不在当前节点前几页里。
 
 ## API 2.0（可选）
 
