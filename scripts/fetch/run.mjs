@@ -102,9 +102,7 @@ async function main() {
       }
 
       const shouldRefreshReplies =
-        shouldRefreshTopic ||
-        !existingRepliesDoc ||
-        Number(existingRepliesDoc?.meta?.reply_count ?? -1) !== Number(topic?.replies ?? -2);
+        shouldRefreshTopic || shouldRefreshRepliesDoc(existingRepliesDoc, Number(topic?.replies ?? 0));
 
       if (shouldRefreshReplies && topic) {
         const replies = await fetchReplies(topicId, Number(topic.replies ?? 0));
@@ -236,6 +234,22 @@ function snapshotFromLists(topicId, latest, hot) {
     replies: Number(hit?.replies ?? 0),
     last_modified: Number(hit?.last_modified ?? hit?.last_touched ?? 0)
   };
+}
+
+function shouldRefreshRepliesDoc(existingRepliesDoc, expectedCount) {
+  if (!existingRepliesDoc) return true;
+
+  const replyCount = Number(existingRepliesDoc?.meta?.reply_count ?? -1);
+  const totalCount = Number(existingRepliesDoc?.meta?.total_count ?? replyCount);
+  const fetchedCount = Number(existingRepliesDoc?.meta?.fetched_count ?? existingRepliesDoc?.replies?.length ?? 0);
+  const repliesLength = Array.isArray(existingRepliesDoc?.replies) ? existingRepliesDoc.replies.length : 0;
+
+  if (replyCount !== Number(expectedCount)) return true;
+  if (existingRepliesDoc?.meta?.partial === true) return true;
+  if (fetchedCount < totalCount) return true;
+  if (repliesLength < totalCount) return true;
+
+  return false;
 }
 
 async function fetchTopic(topicId) {

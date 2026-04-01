@@ -85,9 +85,7 @@ async function main() {
       }
 
       const shouldFetchReplies =
-        CONFIG.forceRefresh ||
-        !existingRepliesDoc ||
-        Number(existingRepliesDoc?.meta?.reply_count ?? -1) !== Number(topic?.replies ?? -2);
+        CONFIG.forceRefresh || shouldRefreshRepliesDoc(existingRepliesDoc, Number(topic?.replies ?? 0));
 
       if (shouldFetchReplies && topic) {
         const replies = await fetchReplies(topicId, Number(topic.replies ?? 0));
@@ -137,6 +135,22 @@ function sortNodes(nodes) {
   return [...(Array.isArray(nodes) ? nodes : [])]
     .filter((n) => n?.name)
     .sort((a, b) => Number(b?.topics ?? 0) - Number(a?.topics ?? 0));
+}
+
+function shouldRefreshRepliesDoc(existingRepliesDoc, expectedCount) {
+  if (!existingRepliesDoc) return true;
+
+  const replyCount = Number(existingRepliesDoc?.meta?.reply_count ?? -1);
+  const totalCount = Number(existingRepliesDoc?.meta?.total_count ?? replyCount);
+  const fetchedCount = Number(existingRepliesDoc?.meta?.fetched_count ?? existingRepliesDoc?.replies?.length ?? 0);
+  const repliesLength = Array.isArray(existingRepliesDoc?.replies) ? existingRepliesDoc.replies.length : 0;
+
+  if (replyCount !== Number(expectedCount)) return true;
+  if (existingRepliesDoc?.meta?.partial === true) return true;
+  if (fetchedCount < totalCount) return true;
+  if (repliesLength < totalCount) return true;
+
+  return false;
 }
 
 async function collectCandidateTopics(nodes) {
